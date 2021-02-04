@@ -27,7 +27,9 @@ regex_exclude_playlist_name="Discussion"
 include_caption_language_codes="" #e.g. en-us,ko,es
 # xml output (for bulk upload into for example Kaltura)
 # Bulk upload options
-xml_userid='' #lowercase netid
+xml_userid='rogerrabbit' #lowercase netid of the owner
+xml_entitled_edit_users='' # Comma separated netids of additional users who have edit access
+xml_category_id=200110393 #Channel Id/category. Ignored if value is None
 xml_filename = "mrss-bulkupload.xml"
 
 if xml_filename:
@@ -91,7 +93,7 @@ def lazy_download_file(path,file, automatic_extension=True):
     
 	with session.get(ctbase + path, stream=True) as r:
 		expectOK(r)
-		print(f"{path} -> {file}")
+		print(f"{path} -> {file}", end=' ')
 		with open(file,"wb") as fd:
 			for chunk in r.iter_content(chunk_size=1<<20):
 				if chunk:
@@ -176,12 +178,22 @@ def main():
 
 			# Todo should escape the CDATA contents
 			bulk_xml += "\n\n<item><action>add</action><type>1</type>"
-			bulk_xml += f"<userId>{xml_userid.strip()}</userId>"
+			bulk_xml += f"\n <userId>{xml_userid.lower().strip()}</userId>"
+
+			if xml_entitled_edit_users:
+				bulk_xml += "\n <entitledUsersEdit>"
+				for u in xml_entitled_edit_users.split(','):
+					bulk_xml += f"  <user>{u.lower().strip()}</user>"
+				bulk_xml += "\n <entitledUsersEdit>"
+ 				
 			bulk_xml += f"\n <name><![CDATA[{m['name']}]]></name>"
 			
 			abstract = f"Lecture Video for {p['name']}"
 			bulk_xml += f"\n <description><![CDATA[{abstract}]]></description>"
-			
+
+			if xml_category_id:
+				bulk_xml += f"\n <categories><categoryid>{xml_category_id}</categoryid></categories>"
+
 			mediaType = '1' #
 			bulk_xml += f"\n <media><mediaType>{mediaType}</mediaType></media>"
 			bulk_xml +=  f"""\n <contentAssets><content><urlContentResource url="{ctbase + path}"></urlContentResource></content></contentAssets>"""
@@ -198,11 +210,12 @@ def main():
 					
 					formattype = 2 # 
 					is_default = False
+					label=f"{language}"
 					if  t['language'][0:2].lower()=='en' and not default_found:
 						default_found = True
 						is_default = True
+						label += " (CT)"
 
-					label="ClassTranscribe"
 					subtitles_xml +=f"""\n    <subTitle isDefault="{str(is_default).lower()}" format="{formattype}" lang="{language}" label="{label}">"""
 					subtitles_xml +=f"""\n    <tags></tags><urlContentResource url="{ctbase + t['srtPath'] }"></urlContentResource></subTitle>"""
 					transcription_count +=1
@@ -218,7 +231,8 @@ def main():
 	
 	if xml_filename :
 		print(f"\nWriting xml to {xml_filename}")
-		header = '<mrss xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="ingestion.xsd">\n'
+		header = '<?xml version="1.0" encoding="UTF-8"?>'
+		header += '<mrss xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="ingestion.xsd">\n'
 		with open(xml_filename,"w", encoding='utf-8') as xml_fh:
 			xml_fh.write(f"{header}<channel>{bulk_xml}</channel></mrss>")
 
