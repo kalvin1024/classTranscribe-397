@@ -23,12 +23,13 @@ download_videos = False
 download_dir = 'download'
 # Filter options
 regex_exclude_video_name=""
+regex_include_playlist_name="^Lecture 4$"
 regex_exclude_playlist_name="Discussion"
 include_caption_language_codes="" #e.g. en-us,ko,es
 # xml output (for bulk upload into for example Kaltura)
 # Bulk upload options
 xml_userid='rogerrabbit' #lowercase netid of the owner
-xml_entitled_edit_users='' # Comma separated netids of additional users who have edit access
+xml_entitled_edit_users='angrave,moran' # Comma separated netids of additional users who have edit access
 xml_category_id=200110393 #Channel Id/category. Ignored if value is None
 xml_filename = "mrss-bulkupload.xml"
 
@@ -149,6 +150,9 @@ def main():
 		if regex_exclude_playlist_name and re.search(regex_exclude_playlist_name, p['name']):
 			skipped_playlists.append( p['name'])
 			continue
+		if regex_include_playlist_name and not re.search(regex_include_playlist_name, p['name']):
+			skipped_playlists.append( p['name'])
+			continue
 
 		playlist_count += 1
 		print(f"\n** Playlist {playlist_count}. ({p['id']}):{p['name']}")
@@ -183,8 +187,8 @@ def main():
 			if xml_entitled_edit_users:
 				bulk_xml += "\n <entitledUsersEdit>"
 				for u in xml_entitled_edit_users.split(','):
-					bulk_xml += f"  <user>{u.lower().strip()}</user>"
-				bulk_xml += "\n <entitledUsersEdit>"
+					bulk_xml += f"<user>{u.lower().strip()}</user>"
+				bulk_xml += "</entitledUsersEdit>"
  				
 			bulk_xml += f"\n <name><![CDATA[{m['name']}]]></name>"
 			
@@ -192,7 +196,7 @@ def main():
 			bulk_xml += f"\n <description><![CDATA[{abstract}]]></description>"
 
 			if xml_category_id:
-				bulk_xml += f"\n <categories><categoryid>{xml_category_id}</categoryid></categories>"
+				bulk_xml += f"\n <categories><categoryId>{xml_category_id}</categoryId></categories>"
 
 			mediaType = '1' #
 			bulk_xml += f"\n <media><mediaType>{mediaType}</mediaType></media>"
