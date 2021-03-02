@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-#Get the auth key from tthe Browser
-
 import os
 import sys
 import json
@@ -14,8 +12,8 @@ from datetime import datetime
 # Also, tip of the hat to Liam Moran for providing a working example with captions
 
 # Course offering to download 
-courseOffering = '6cb18e07-8df2-4b44-86ab-1ef1117e8eb3' #CS374 FA202
-#courseOffering  = '2c7a83cc-e2f3-493a-ae65-33f9c998e8ed' # Test course  with some transcriptions
+#courseOffering = '6cb18e07-8df2-4b44-86ab-1ef1117e8eb3' #CS374 FA202
+courseOffering  = '2c7a83cc-e2f3-493a-ae65-33f9c998e8ed' # Test course  with some transcriptions
 
 # Download options:
 download_transcriptions = True
@@ -23,19 +21,21 @@ download_videos = False
 download_dir = 'download'
 # Filter options
 regex_exclude_video_name=""
-regex_include_playlist_name="^Lecture 4$"
+regex_include_playlist_name="^Lecture 5"
 regex_exclude_playlist_name="Discussion"
 include_caption_language_codes="" #e.g. en-us,ko,es
 # xml output (for bulk upload into for example Kaltura)
 # Bulk upload options
 xml_userid='rogerrabbit' #lowercase netid of the owner
 xml_entitled_edit_users='angrave,moran' # Comma separated netids of additional users who have edit access
-xml_category_id=200110393 #Channel Id/category. Ignored if value is None
-xml_filename = "mrss-bulkupload.xml"
+xml_category_id=None #Channel Id/category number. Ignored if value is None e.g. 200110393
+xml_filename = None # "mrss-bulkupload.xml"
+xml_caption_format='srtt'
 
 if xml_filename:
 	assert(xml_userid)
-
+	assert xml_caption_format in ['', 'vtt','srt'] # Only srt has been tested
+	
 # Source
 ctbase='https://classtranscribe.illinois.edu'
 # For testing / pulling content from other instances...
@@ -63,7 +63,6 @@ def getPlaylistsForCourseOffering(cid):
 		print(f"{url} expected json response");
 		print(session.get(url).raw)
 		sys.exit(1)
-
 
 def getPlaylistDetails(pid):
 	url=f"{ctbase}/api/Playlists/{pid}"
@@ -170,8 +169,13 @@ def main():
 				skipped_videos.append(f"{p['name']}/{m['name']}")
 				continue
 
+			if m['video'] is None:
+				print(" Skipping video {m['name']} because no video file exists")
+				skipped_videos.append(f"{p['name']}/{m['name']}")
+				continue
+				
 			video_count += 1
-			print(f" {video_count}: {p['name']}/{m['name']}")
+			print(f" {video_count}: '{p['name']}/{m['name']}' ({m['id']})({m['video']['id']})")
 
 			path = m['video']['video1Path']
 			basename = sanitize(m['name'])
@@ -203,25 +207,34 @@ def main():
 			bulk_xml +=  f"""\n <contentAssets><content><urlContentResource url="{ctbase + path}"></urlContentResource></content></contentAssets>"""
 
 			subtitles_xml = ""
-			filter_languages = map(lambda x: x.lower().strip(), include_caption_language_codes.split(',')) if include_caption_language_codes else None
+			filter_languages = list(map(lambda x: x.lower().strip(), include_caption_language_codes.split(','))) if include_caption_language_codes else None
 			default_found = False
 			for t in m['transcriptions']:
 				
 				language = to_language_word(t['language'])
 				print(f"  |--Transcription:{t['language']}:{language} at {t['path']} srt:{t['srtPath']} ({t['id']})")
-				
-				if language != '?' and  t['srtPath'] and ((filter_languages is None) or (t['language'].lower() in filter_languages)):
-					
-					formattype = 2 # 
+				# https://www.kaltura.com/api_v3/testmeDoc/enums/KalturaCaptionType.html
+					# 1=srt, 2=dxfp, 3=webvtt, 4=CAP, 5= SCC
+					# but only srt and dxfp are supported by the editor (according to docs/support tickets)
+				 
+				caption_path = None
+				format_type = None
+				if xml_caption_format =='srt' :
+					format_type = 1
+					caption_path = t['srtPath'] 
+				elif xml_caption_format =='vtt' :
+					format_type = 3 # Not tested
+					caption_path = t['path'] 
+				if language != '?' and caption_path  and ((filter_languages is None) or (t['language'].lower() in filter_languages)):				
 					is_default = False
 					label=f"{language}"
 					if  t['language'][0:2].lower()=='en' and not default_found:
 						default_found = True
 						is_default = True
-						label += " (CT)"
+						label += " (ClassTranscribe)"
 
-					subtitles_xml +=f"""\n    <subTitle isDefault="{str(is_default).lower()}" format="{formattype}" lang="{language}" label="{label}">"""
-					subtitles_xml +=f"""\n    <tags></tags><urlContentResource url="{ctbase + t['srtPath'] }"></urlContentResource></subTitle>"""
+					subtitles_xml +=f"""\n    <subTitle isDefault="{str(is_default).lower()}" format="{format_type}" lang="{language}" label="{label}">"""
+					subtitles_xml +=f"""\n    <tags></tags><urlContentResource url="{ctbase + caption_path }"></urlContentResource>\n    </subTitle>"""
 					transcription_count +=1
 
 			if subtitles_xml:
